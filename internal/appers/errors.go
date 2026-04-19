@@ -31,4 +31,8 @@ var (
 		Code: http.StatusInternalServerError,
 		Msg:  "Unknown error",
 	}
+	ErrDuplicatePayment = &ErrorResp{
+		Code: http.StatusBadRequest,
+		Msg:  "Duplicate payment",
+	}
 )

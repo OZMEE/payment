@@ -63,5 +63,5 @@ func (s PaymentServiceImpl) DeletePayment(ctx context.Context, id int64) error {
 }
 
 func dtoToPayment(dto *model.PaymentDto) *model.Payment {
-	return &model.Payment{Amount: dto.Amount}
+	return &model.Payment{Amount: dto.Amount, PaymentId: dto.PaymentId}
 }

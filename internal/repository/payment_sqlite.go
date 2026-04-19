@@ -8,6 +8,7 @@ import (
 	"log"
 	"payment/internal/appers"
 	"payment/internal/model"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -55,6 +56,7 @@ func initTables(ctx context.Context, db *sql.DB) error {
 	_, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS payments (
 		    id INTEGER PRIMARY KEY AUTOINCREMENT,
+		    payment_id INTEGER UNIQUE NOT NULL,
 		    amount INTEGER
 		);
 	`)
@@ -65,7 +67,7 @@ func initTables(ctx context.Context, db *sql.DB) error {
 }
 
 func (r *PaymentRepositorySqlImpl) GetAllPayments(ctx context.Context) ([]*model.Payment, error) {
-	query := "SELECT id, amount FROM payments;"
+	query := "SELECT id, payment_id, amount FROM payments;"
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, appers.NewSqlExecutions(err.Error())
@@ -74,7 +76,7 @@ func (r *PaymentRepositorySqlImpl) GetAllPayments(ctx context.Context) ([]*model
 	res := make([]*model.Payment, 0)
 	for rows.Next() {
 		var payment model.Payment
-		err := rows.Scan(&payment.ID, &payment.Amount)
+		err := rows.Scan(&payment.ID, &payment.PaymentId, &payment.Amount)
 		if err != nil {
 			return nil, appers.NewSqlExecutions(err.Error())
 		}
@@ -85,34 +87,38 @@ func (r *PaymentRepositorySqlImpl) GetAllPayments(ctx context.Context) ([]*model
 }
 
 func (r *PaymentRepositorySqlImpl) GetPaymentById(ctx context.Context, id int64) (*model.Payment, error) {
-	query := "SELECT id, amount FROM payments WHERE id = $1"
+	query := "SELECT id, payment_id, amount FROM payments WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, query, id)
 	return scanRow(row)
 }
 
 func (r *PaymentRepositorySqlImpl) PostPayment(ctx context.Context, dto *model.Payment) (*model.Payment, error) {
-	query := "INSERT INTO payments (amount) VALUES (?) RETURNING id, amount"
-	row := r.db.QueryRowContext(ctx, query, dto.Amount)
+	query := "INSERT INTO payments (payment_id, amount) VALUES (?, ?) RETURNING id, payment_id, amount"
+	row := r.db.QueryRowContext(ctx, query, dto.PaymentId, dto.Amount)
 	return scanRow(row)
 }
 
 func (r *PaymentRepositorySqlImpl) PutPayment(ctx context.Context, dto *model.Payment, id int64) (*model.Payment, error) {
-	query := "UPDATE payments SET amount = ? WHERE id = ? RETURNING id, amount"
+	query := "UPDATE payments SET amount = ? WHERE id = ? RETURNING id, payment_id, amount"
 	row := r.db.QueryRowContext(ctx, query, dto.Amount, id)
 	return scanRow(row)
 }
 
 func (r *PaymentRepositorySqlImpl) DeletePayment(ctx context.Context, id int64) (*model.Payment, error) {
-	query := "DELETE FROM payments WHERE id = ? RETURNING id, amount"
+	query := "DELETE FROM payments WHERE id = ? RETURNING id, payment_id, amount"
 	row := r.db.QueryRowContext(ctx, query, id)
 	return scanRow(row)
 }
 
 func scanRow(rows *sql.Row) (*model.Payment, error) {
 	var payment model.Payment
-	if err := rows.Scan(&payment.ID, &payment.Amount); err != nil {
+	if err := rows.Scan(&payment.ID, &payment.PaymentId, &payment.Amount); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, appers.ErrEventFound
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") &&
+			strings.Contains(err.Error(), "payment_id") {
+			return nil, appers.ErrDuplicatePayment
 		}
 		return nil, appers.NewSqlExecutions(err.Error())
 	}

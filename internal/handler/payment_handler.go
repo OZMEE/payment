@@ -157,5 +157,8 @@ func getPaymentDto(r *http.Request) (*model.PaymentDto, error) {
 	if dto.Amount <= 0 {
 		return nil, appers.NewErrValidation("Invalid amount")
 	}
+	if dto.PaymentId <= 0 {
+		return nil, appers.NewErrValidation("Invalid payment id")
+	}
 	return &dto, nil
 }
