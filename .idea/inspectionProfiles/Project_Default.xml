@@ -1,0 +1,17 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="GoResourceLeak" enabled="true" level="WARNING" enabled_by_default="true">
+      <functions>
+        <function importPath="database/sql" name="Open" />
+        <function importPath="payment/internal/repository" name="insertIntoPaymentsSql" />
+      </functions>
+      <methods>
+        <method importPath="database/sql" receiver="*DB" name="QueryContext" />
+      </methods>
+      <types>
+        <type name="sql.Rows" />
+      </types>
+    </inspection_tool>
+  </profile>
+</component>
