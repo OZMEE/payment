@@ -1,0 +1,9 @@
+-- +goose Up
+CREATE TABLE IF NOT EXISTS payments (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    payment_id INTEGER UNIQUE NOT NULL,
+    amount INTEGER
+);
+
+-- +goose Down
+DROP TABLE IF EXISTS payments;
