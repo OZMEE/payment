@@ -47,14 +47,14 @@ func Load() (*Config, error) {
 	}
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, err
+		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); !ok {
+			return nil, err
+		}
 	}
 
 	var config Config
 	if err := v.Unmarshal(&config); err != nil {
-		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); !ok {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	return &config, nil

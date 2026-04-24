@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"payment/pkg/config"
 
@@ -14,6 +15,8 @@ import (
 type DB interface {
 	QueryRow(ctx context.Context, query string, args ...any) *sqlx.Row
 	QueryRows(ctx context.Context, query string, args ...any) (*sqlx.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	Close() error
 }
 
 type Database struct {
@@ -28,17 +31,25 @@ func (d *Database) QueryRows(ctx context.Context, query string, args ...any) (*s
 	return d.db.QueryxContext(ctx, query, args...)
 }
 
+func (d *Database) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return d.db.ExecContext(ctx, query, args...)
+}
+
+func (d *Database) Close() error {
+	return d.db.Close()
+}
+
 func New(cfg config.DatabaseConfig) (*Database, error) {
 	db, err := sqlx.Open(cfg.Driver, cfg.DNS())
 	if err != nil {
-		panic(fmt.Sprintf("failed to connect db: %v", err))
+		return nil, err
 	}
 
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
 
 	if err := db.Ping(); err != nil {
-		panic(fmt.Sprintf("failed to ping db: %v", err))
+		return nil, err
 	}
 	fmt.Println("successfully connected to db")
 

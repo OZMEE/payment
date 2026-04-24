@@ -23,7 +23,7 @@ func NewPaymentRepositoryImpl(db *db.Database) *PaymentRepositoryImpl {
 }
 
 func (r *PaymentRepositoryImpl) GetAllPayments(ctx context.Context) ([]*model.Payment, error) {
-	query := "SELECT * FROM payments"
+	query := "SELECT id, payment_id, amount FROM payments"
 
 	rows, err := r.db.QueryRows(ctx, query)
 	if err != nil {
@@ -43,7 +43,7 @@ func (r *PaymentRepositoryImpl) GetAllPayments(ctx context.Context) ([]*model.Pa
 }
 
 func (r *PaymentRepositoryImpl) GetPaymentById(ctx context.Context, id int64) (*model.Payment, error) {
-	query := "SELECT * FROM payments WHERE id = $1"
+	query := "SELECT id, payment_id, amount FROM payments WHERE id = $1"
 	row := r.db.QueryRow(ctx, query, id)
 	return scanRow(row)
 }

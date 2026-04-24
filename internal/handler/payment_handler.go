@@ -24,10 +24,10 @@ type PaymentHandler interface {
 
 type PaymentHandlerImpl struct {
 	service service.PaymentService
-	log     zap.Logger
+	log     *zap.Logger
 }
 
-func NewPaymentHandlerImpl(service service.PaymentService, log zap.Logger) *PaymentHandlerImpl {
+func NewPaymentHandlerImpl(service service.PaymentService, log *zap.Logger) *PaymentHandlerImpl {
 	return &PaymentHandlerImpl{service: service, log: log}
 }
 
@@ -183,7 +183,7 @@ func (h *PaymentHandlerImpl) getPaymentDto(r *http.Request) (*model.PaymentDto, 
 		return nil, appers.ErrParseJson.SetMsg(err.Error())
 	}
 	if dto.Amount <= 0 {
-		return nil, appers.NewErrValidation("Invalid amount", "amount", strconv.Itoa(dto.Amount))
+		return nil, appers.NewErrValidation("Invalid amount", "amount", strconv.FormatInt(dto.Amount, 10))
 	}
 	if dto.PaymentId <= 0 {
 		return nil, appers.NewErrValidation("Invalid payment_id", "payment_id", strconv.FormatInt(dto.PaymentId, 10))

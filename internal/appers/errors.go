@@ -18,8 +18,13 @@ func (e *ErrorResp) Error() string {
 }
 
 func (e *ErrorResp) SetMsg(msg string) *ErrorResp {
-	e.Msg = msg
-	return e
+	return &ErrorResp{
+		Code:       e.Code,
+		Status:     e.Status,
+		FieldName:  e.FieldName,
+		FieldValue: e.FieldValue,
+		Msg:        msg,
+	}
 }
 
 func NewErrValidation(msg string, fieldName string, value string) *ErrorResp {
