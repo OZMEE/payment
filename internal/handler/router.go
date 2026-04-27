@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"payment/pkg/config"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -21,7 +22,7 @@ func NewPaymentRouterImpl(handler PaymentHandler) *PaymentRouterImpl {
 	return &PaymentRouterImpl{handler: handler}
 }
 
-func (p PaymentRouterImpl) Route() {
+func (p PaymentRouterImpl) Route(cfg config.ServerConfig) {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
@@ -36,7 +37,7 @@ func (p PaymentRouterImpl) Route() {
 		r.Put("/payments/{id}", p.handler.PutPayment)
 		r.Delete("/payments/{id}", p.handler.DeletePayment)
 	})
-	if err := http.ListenAndServe(":8080", r); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", cfg.Port), r); err != nil {
 		fmt.Printf("Server failed: %v\n", err)
 		return
 	}

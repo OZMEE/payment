@@ -4,14 +4,35 @@ import (
 	"payment/internal/handler"
 	"payment/internal/repository"
 	"payment/internal/service"
+	"payment/pkg/config"
+	"payment/pkg/db"
+	"payment/pkg/logger"
 )
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		panic(err)
+	}
+	database, err := db.New(cfg.Database)
+	if err != nil {
+		panic(err)
+	}
+	defer func(database *db.Database) {
+		err := database.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(database)
 
-	paymentRepo := repository.NewPaymentRepositorySqlImpl()
+	log, err := logger.New()
+	if err != nil {
+		panic(err)
+	}
+	paymentRepo := repository.NewPaymentRepositoryImpl(database)
 	paymentSvc := service.NewPaymentServiceImpl(paymentRepo)
-	var paymentHandler handler.PaymentHandler = handler.NewPaymentHandlerImpl(paymentSvc)
-	var paymentRouter handler.PaymentRouter = handler.NewPaymentRouterImpl(paymentHandler)
+	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, log)
+	paymentRouter := handler.NewPaymentRouterImpl(paymentHandler)
 
-	paymentRouter.Route()
+	paymentRouter.Route(cfg.Server)
 }
