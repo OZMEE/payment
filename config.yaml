@@ -9,3 +9,9 @@ database:
   #password: supersecret
   name: myapp_db
   migrations_path: /app/deploy
+kafka:
+  brokers: "kafka:9093"
+  topic: "common"
+  acks: -1
+  linger_ms: 10
+  batch_size: 16384

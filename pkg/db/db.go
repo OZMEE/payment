@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"payment/pkg/config"
 
 	"github.com/jmoiron/sqlx"
@@ -51,7 +50,6 @@ func New(cfg config.DatabaseConfig) (*Database, error) {
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
-	fmt.Println("successfully connected to db")
 
 	err = goose.SetDialect(cfg.Driver)
 	if err != nil {

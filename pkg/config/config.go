@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	Server   ServerConfig   `mapstructure:"server"`
+	Kafka    KafkaConfig    `mapstructure:"kafka"`
 }
 
 type DatabaseConfig struct {
@@ -26,6 +27,14 @@ type DatabaseConfig struct {
 type ServerConfig struct {
 	Host string `mapstructure:"host"`
 	Port string `mapstructure:"port"`
+}
+
+type KafkaConfig struct {
+	Brokers   []string `mapstructure:"brokers"`
+	Topic     string   `mapstructure:"topic"`
+	Acks      int16    `mapstructure:"acks"`
+	LingerMs  int64    `mapstructure:"linger_ms"`
+	BatchSize int32    `mapstructure:"batch_size"`
 }
 
 func Load() (*Config, error) {
