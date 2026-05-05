@@ -43,10 +43,10 @@ func main() {
 		panic(err)
 	}
 	log.Info("Successfully connected to kafka")
-	paymentProducerService := service.NewPaymentProducerImpl(producer, log)
+	paymentProducerService := service.NewPaymentProducerImpl(cfg.Kafka, producer, log)
 	paymentRepo := repository.NewPaymentRepositoryImpl(database)
-	paymentSvc := service.NewPaymentServiceImpl(paymentRepo)
-	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, paymentProducerService, log)
+	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, paymentProducerService)
+	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, log)
 	paymentRouter := handler.NewPaymentRouterImpl(paymentHandler)
 
 	paymentRouter.Route(cfg.Server)

@@ -23,13 +23,12 @@ type PaymentHandler interface {
 }
 
 type PaymentHandlerImpl struct {
-	service         service.PaymentService
-	producerService service.PaymentProducer
-	log             *zap.Logger
+	service service.PaymentService
+	log     *zap.Logger
 }
 
-func NewPaymentHandlerImpl(service service.PaymentService, producerService service.PaymentProducer, log *zap.Logger) *PaymentHandlerImpl {
-	return &PaymentHandlerImpl{service: service, producerService: producerService, log: log}
+func NewPaymentHandlerImpl(service service.PaymentService, log *zap.Logger) *PaymentHandlerImpl {
+	return &PaymentHandlerImpl{service: service, log: log}
 }
 
 func (h *PaymentHandlerImpl) GetAllPayments(w http.ResponseWriter, r *http.Request) {
@@ -90,11 +89,6 @@ func (h *PaymentHandlerImpl) PostPayment(w http.ResponseWriter, r *http.Request)
 
 	payment, err := h.service.PostPayment(r.Context(), dto)
 	if err != nil {
-		h.errorHandling(w, err)
-		return
-	}
-
-	if err := h.producerService.SendPaymentEvent(r.Context(), payment, "user-id"); err != nil {
 		h.errorHandling(w, err)
 		return
 	}

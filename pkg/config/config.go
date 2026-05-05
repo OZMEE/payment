@@ -30,11 +30,18 @@ type ServerConfig struct {
 }
 
 type KafkaConfig struct {
-	Brokers   []string `mapstructure:"brokers"`
-	Topic     string   `mapstructure:"topic"`
-	Acks      int16    `mapstructure:"acks"`
-	LingerMs  int64    `mapstructure:"linger_ms"`
-	BatchSize int32    `mapstructure:"batch_size"`
+	Brokers               []string `mapstructure:"brokers"`
+	PaymentTopic          string   `mapstructure:"payment_topic"`
+	CommitTopic           string   `mapstructure:"commit_topic"`
+	Acks                  int16    `mapstructure:"acks"`
+	LingerMs              int64    `mapstructure:"linger_ms"`
+	BatchSize             int32    `mapstructure:"batch_size"`
+	RecordRetries         int32    `mapstructure:"record_retries"`
+	RecordDeliveryTimeout int32    `mapstructure:"record_delivery_timeout"`
+	MaxBufferedRecords    int32    `mapstructure:"max_buffered_records"`
+	MaxBufferedBytes      int32    `mapstructure:"max_buffered_bytes"`
+	DialTimeout           int32    `mapstructure:"dial_timeout"`
+	ContextTimeout        int32    `mapstructure:"context_timeout"`
 }
 
 func Load() (*Config, error) {

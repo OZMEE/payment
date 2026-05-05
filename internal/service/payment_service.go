@@ -15,11 +15,12 @@ type PaymentService interface {
 }
 
 type PaymentServiceImpl struct {
-	repository repository.PaymentRepository
+	repository      repository.PaymentRepository
+	paymentProducer PaymentProducer
 }
 
-func NewPaymentServiceImpl(repository repository.PaymentRepository) *PaymentServiceImpl {
-	return &PaymentServiceImpl{repository: repository}
+func NewPaymentServiceImpl(repository repository.PaymentRepository, paymentProducer PaymentProducer) *PaymentServiceImpl {
+	return &PaymentServiceImpl{repository: repository, paymentProducer: paymentProducer}
 }
 
 func (s PaymentServiceImpl) GetAllPayments(ctx context.Context) ([]*model.Payment, error) {
@@ -43,6 +44,11 @@ func (s PaymentServiceImpl) PostPayment(ctx context.Context, dto *model.PaymentD
 	if err != nil {
 		return nil, err
 	}
+
+	if err := s.paymentProducer.SendPaymentEvent(ctx, db, "user-id"); err != nil {
+		return nil, err
+	}
+
 	return db, nil
 }
 

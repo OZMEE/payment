@@ -1,7 +1,6 @@
 package kafka
 
 import (
-	"fmt"
 	"payment/pkg/config"
 	"time"
 
@@ -18,20 +17,21 @@ func NewProducer(cfg config.KafkaConfig) (*kgo.Client, error) {
 	case -1:
 		acks = kgo.AllISRAcks()
 	}
+
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(cfg.Brokers...),
-		kgo.DefaultProduceTopic(cfg.Topic),
+		kgo.DefaultProduceTopic(cfg.CommitTopic),
 		kgo.RequiredAcks(acks),
 		kgo.ProducerBatchCompression(kgo.SnappyCompression()),
 		kgo.ProducerLinger(time.Duration(cfg.LingerMs) * time.Millisecond),
 		kgo.ProducerBatchMaxBytes(cfg.BatchSize),
 
-		kgo.RecordRetries(3),
-		kgo.RecordDeliveryTimeout(30 * time.Second),
-		kgo.MaxBufferedRecords(10_000),
-		kgo.MaxBufferedBytes(100 * 1024 * 1024),
+		kgo.RecordRetries(int(cfg.RecordRetries)),
+		kgo.RecordDeliveryTimeout(time.Duration(cfg.RecordDeliveryTimeout) * time.Second),
+		kgo.MaxBufferedRecords(int(cfg.MaxBufferedBytes)),
+		kgo.MaxBufferedBytes(int(cfg.MaxBufferedRecords)),
+		kgo.DialTimeout(time.Duration(cfg.DialTimeout) * time.Second), // Таймаут на установление соединения
 	}
-	fmt.Println(opts)
 
 	client, err := kgo.NewClient(opts...)
 	if err != nil {
