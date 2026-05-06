@@ -52,4 +52,12 @@ var (
 		Code:   http.StatusBadRequest,
 		Status: "Json parse error",
 	}
+	ErrKafkaSendEvent = &ErrorResp{
+		Code:   http.StatusBadRequest,
+		Status: "Send event error",
+	}
+	ErrKafkaProduceTimeout = &ErrorResp{
+		Code:   http.StatusBadRequest,
+		Status: "Timeout",
+	}
 )

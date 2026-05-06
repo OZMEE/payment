@@ -6,14 +6,26 @@ import (
 	"payment/internal/service"
 	"payment/pkg/config"
 	"payment/pkg/db"
+	"payment/pkg/kafka"
 	"payment/pkg/logger"
+
+	"go.uber.org/zap"
 )
 
 func main() {
+	log, err := logger.New()
+	if err != nil {
+		panic(err)
+	}
+	log.Info("Logger initialized")
+
 	cfg, err := config.Load()
 	if err != nil {
 		panic(err)
 	}
+	log.Info("Configuration loaded",
+		zap.Any("config", cfg))
+
 	database, err := db.New(cfg.Database)
 	if err != nil {
 		panic(err)
@@ -24,13 +36,16 @@ func main() {
 			panic(err)
 		}
 	}(database)
+	log.Info("Successfully connected to db")
 
-	log, err := logger.New()
+	producer, err := kafka.NewProducer(cfg.Kafka)
 	if err != nil {
 		panic(err)
 	}
+	log.Info("Successfully connected to kafka")
+	paymentProducerService := service.NewPaymentProducerImpl(cfg.Kafka, producer, log)
 	paymentRepo := repository.NewPaymentRepositoryImpl(database)
-	paymentSvc := service.NewPaymentServiceImpl(paymentRepo)
+	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, paymentProducerService)
 	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, log)
 	paymentRouter := handler.NewPaymentRouterImpl(paymentHandler)
 

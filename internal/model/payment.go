@@ -10,3 +10,9 @@ type PaymentDto struct {
 	PaymentId int64 `json:"payment_id"`
 	Amount    int64 `json:"amount"`
 }
+
+type PaymentEvent struct {
+	UserId    string `json:"user_id"`
+	PaymentId int64  `json:"payment_id"`
+	Amount    int64  `json:"amount"`
+}

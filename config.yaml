@@ -9,3 +9,17 @@ database:
   #password: supersecret
   name: myapp_db
   migrations_path: /app/deploy
+kafka:
+  brokers:
+   - "kafka:9093"
+  payment_topic: "payment-events"
+  common_topic: "common-events"
+  acks: -1
+  linger_ms: 10
+  batch_size: 16384
+  record_retries: 3
+  record_delivery_timeout: 30
+  max_buffered_records: 10000
+  max_buffered_bytes: 104857600
+  dial_timeout: 5
+  context_timeout: 5
