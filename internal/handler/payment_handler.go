@@ -94,7 +94,7 @@ func (h *PaymentHandlerImpl) PostPayment(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(payment); err != nil {
 		h.errorHandling(w, err)
 		return
@@ -150,16 +150,12 @@ func (h *PaymentHandlerImpl) errorHandling(w http.ResponseWriter, err error) {
 	var errResp *appers.ErrorResp
 	if !errors.As(err, &errResp) {
 		h.log.Error(err.Error())
-		http.Error(w, fmt.Sprintf("%v (err = %s)", appers.ErrUnknown.SetMsg(err.Error()), err), appers.ErrUnknown.Code)
+		http.Error(w, fmt.Sprintf("%v (err = %s)", appers.ErrUnknown.Builder().Msg(err.Error()).Build(), err),
+			appers.ErrUnknown.Code)
 		return
 	}
 
-	if errResp.FieldName != "" {
-		h.log.Error(errResp.Error(),
-			zap.String(errResp.FieldName, errResp.FieldValue))
-	} else {
-		h.log.Error(errResp.Error())
-	}
+	h.log.Error(errResp.Error(), zap.Reflect("error", errResp))
 
 	http.Error(w, errResp.Error(), errResp.Code)
 }
@@ -167,11 +163,13 @@ func (h *PaymentHandlerImpl) errorHandling(w http.ResponseWriter, err error) {
 func (h *PaymentHandlerImpl) getId(r *http.Request) (int64, error) {
 	idString := chi.URLParam(r, "id")
 	if idString == "" {
-		return -1, appers.NewErrValidation("Payment ID is required", "id", idString)
+		return -1, appers.ErrValidation.Builder().Msg("Payment ID is required").Field(
+			"id", idString).Build()
 	}
 	id, err := strconv.ParseInt(idString, 10, 64)
 	if err != nil {
-		return -1, appers.NewErrValidation("Invalid format for Payment ID", "id", idString)
+		return -1, appers.ErrValidation.Builder().Msg("Invalid format for Payment ID").Field(
+			"id", idString).Build()
 	}
 	return id, nil
 }
@@ -180,13 +178,15 @@ func (h *PaymentHandlerImpl) getPaymentDto(r *http.Request) (*model.PaymentDto, 
 	var dto model.PaymentDto
 	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
 		h.log.Error(err.Error())
-		return nil, appers.ErrParseJson.SetMsg(err.Error())
+		return nil, appers.ErrParseJson.Builder().Msg(err.Error()).Build()
 	}
 	if dto.Amount <= 0 {
-		return nil, appers.NewErrValidation("Invalid amount", "amount", strconv.FormatInt(dto.Amount, 10))
+		return nil, appers.ErrValidation.Builder().Msg("Invalid amount").Field(
+			"amount", strconv.FormatInt(dto.Amount, 10)).Build()
 	}
 	if dto.PaymentId <= 0 {
-		return nil, appers.NewErrValidation("Invalid payment_id", "payment_id", strconv.FormatInt(dto.PaymentId, 10))
+		return nil, appers.ErrValidation.Builder().Msg("Invalid payment_id").Field(
+			"payment_id", strconv.FormatInt(dto.PaymentId, 10)).Build()
 	}
 	return &dto, nil
 }

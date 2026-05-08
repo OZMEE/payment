@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"payment/internal/appers"
 	"payment/internal/model"
 	"payment/pkg/config"
@@ -14,7 +13,7 @@ import (
 )
 
 type PaymentProducer interface {
-	SendPaymentEvent(ctx context.Context, payment *model.Payment, userId string) error
+	SendPaymentEvent(ctx context.Context, event *model.OutboxEvent) error
 }
 
 type PaymentProducerImpl struct {
@@ -33,22 +32,13 @@ func NewPaymentProducerImpl(cfg config.KafkaConfig, producer *kgo.Client, log *z
 	}
 }
 
-func (p *PaymentProducerImpl) SendPaymentEvent(ctx context.Context, payment *model.Payment, userId string) error {
-	event := model.PaymentEvent{
-		UserId:    userId,
-		PaymentId: payment.PaymentId,
-		Amount:    payment.Amount,
-	}
-	payload, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-	key := strconv.FormatInt(payment.ID, 10)
+func (p *PaymentProducerImpl) SendPaymentEvent(ctx context.Context, event *model.OutboxEvent) error {
+	key := strconv.FormatInt(event.ID, 10)
 
 	record := &kgo.Record{
 		Topic: p.topic,
 		Key:   []byte(key),
-		Value: payload,
+		Value: []byte(event.Payload),
 	}
 
 	produceCtx, cancel := context.WithTimeout(ctx, time.Duration(p.contextTimeout)*time.Second)
@@ -58,7 +48,7 @@ func (p *PaymentProducerImpl) SendPaymentEvent(ctx context.Context, payment *mod
 
 	if err := results.FirstErr(); err != nil {
 		p.log.Error("failed to send event", zap.Error(err))
-		return appers.ErrKafkaSendEvent.SetMsg(err.Error())
+		return appers.ErrKafkaSendEvent.Builder().Msg(err.Error()).Build()
 	}
 
 	return nil

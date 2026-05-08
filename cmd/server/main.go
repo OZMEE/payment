@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"payment/internal/handler"
 	"payment/internal/repository"
 	"payment/internal/service"
@@ -45,9 +46,13 @@ func main() {
 	log.Info("Successfully connected to kafka")
 	paymentProducerService := service.NewPaymentProducerImpl(cfg.Kafka, producer, log)
 	paymentRepo := repository.NewPaymentRepositoryImpl(database)
-	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, paymentProducerService)
+	outboxRepo := repository.NewOutboxRepositoryImpl(database)
+	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, outboxRepo, log)
+	workerPool := service.NewWorkerPoolImpl(cfg.Worker, paymentProducerService, outboxRepo, log)
 	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, log)
 	paymentRouter := handler.NewPaymentRouterImpl(paymentHandler)
+
+	workerPool.Start(context.Background())
 
 	paymentRouter.Route(cfg.Server)
 }

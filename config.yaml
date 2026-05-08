@@ -23,3 +23,8 @@ kafka:
   max_buffered_bytes: 104857600
   dial_timeout: 5
   context_timeout: 5
+worker:
+  count: 2
+  max_attempts: 3
+  timeout_sec: 5
+  limit_events: 3
