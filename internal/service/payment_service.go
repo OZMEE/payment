@@ -43,12 +43,24 @@ func (s PaymentServiceImpl) GetPaymentById(ctx context.Context, id int64) (*mode
 }
 
 func (s PaymentServiceImpl) PostPayment(ctx context.Context, dto *model.PaymentDto) (response *model.Payment, errResponse error) {
-	tx, err := s.paymentRepository.BeginTransaction(ctx)
+	tx, err := s.paymentRepository.BeginTransaction()
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
+		if r := recover(); r != nil {
+			if err := tx.Rollback(); err != nil {
+				s.log.Error("Failed to rollback transaction after panic",
+					zap.Any("recovered", r),
+					zap.Error(err))
+			} else {
+				s.log.Error("Transaction rolled back after panic",
+					zap.Any("recovered", r))
+			}
+			panic(r)
+		}
+
 		if errResponse != nil {
 			if err := tx.Rollback(); err != nil {
 				s.log.Error("Failed to rollback transaction", zap.Error(err))
@@ -64,12 +76,12 @@ func (s PaymentServiceImpl) PostPayment(ctx context.Context, dto *model.PaymentD
 		}
 	}()
 
-	payment, err := s.paymentRepository.PostPayment(ctx, dtoToPayment(dto), tx)
+	payment, err := s.paymentRepository.PostPayment(ctx, tx, dtoToPayment(dto))
 	if err != nil {
 		return nil, err
 	}
 
-	if err = s.outboxRepository.CreateOutbox(ctx, payment, tx); err != nil {
+	if err = s.outboxRepository.CreateOutbox(ctx, tx, payment); err != nil {
 		return nil, err
 	}
 

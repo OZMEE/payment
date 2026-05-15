@@ -22,7 +22,7 @@ func NewPaymentRepositoryImpl(db *db.Database) *PaymentRepositoryImpl {
 	return &PaymentRepositoryImpl{db: db}
 }
 
-func (r *PaymentRepositoryImpl) BeginTransaction(ctx context.Context) (*sqlx.Tx, error) {
+func (r *PaymentRepositoryImpl) BeginTransaction() (*sqlx.Tx, error) {
 	tx, err := r.db.BeginTransaction()
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func (r *PaymentRepositoryImpl) GetPaymentById(ctx context.Context, id int64) (*
 	return scanPaymentRow(row, op)
 }
 
-func (r *PaymentRepositoryImpl) PostPayment(ctx context.Context, dto *model.Payment, tx *sqlx.Tx) (*model.Payment, error) {
+func (r *PaymentRepositoryImpl) PostPayment(ctx context.Context, tx *sqlx.Tx, dto *model.Payment) (*model.Payment, error) {
 	const op = "PaymentRepositoryImpl.PostPayment"
 	query := "INSERT INTO payments (payment_id, amount) VALUES ($1, $2) RETURNING id, payment_id, amount"
 	row := tx.QueryRowxContext(ctx, query, dto.PaymentId, dto.Amount)

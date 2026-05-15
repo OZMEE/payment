@@ -17,13 +17,13 @@ const (
 	ProcessingStatus = "PROCESSING"
 	SuccessStatus    = "SUCCESS"
 	FailedStatus     = "FAILED"
-	PendingStatus    = "PENDING"
 )
 
 type OutboxRepository interface {
-	GetPendingOutboxes(ctx context.Context, limitEvents int) ([]*model.OutboxEvent, error)
-	CreateOutbox(ctx context.Context, object any, tx *sqlx.Tx) error
-	UpdateOutboxes(ctx context.Context, events []*model.OutboxEvent) error
+	GetProcessingOutboxes(ctx context.Context, tx *sqlx.Tx, limitEvents int) ([]*model.OutboxEvent, error)
+	CreateOutbox(ctx context.Context, tx *sqlx.Tx, payload any) error
+	UpdateOutboxes(ctx context.Context, tx *sqlx.Tx, events []*model.OutboxEvent) error
+	BeginTransaction() (*sqlx.Tx, error)
 }
 
 type OutboxRepositoryImpl struct {
@@ -34,7 +34,15 @@ func NewOutboxRepositoryImpl(db *db.Database) *OutboxRepositoryImpl {
 	return &OutboxRepositoryImpl{db: db}
 }
 
-func (r *OutboxRepositoryImpl) CreateOutbox(ctx context.Context, payload any, tx *sqlx.Tx) error {
+func (r *OutboxRepositoryImpl) BeginTransaction() (*sqlx.Tx, error) {
+	tx, err := r.db.BeginTransaction()
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+func (r *OutboxRepositoryImpl) CreateOutbox(ctx context.Context, tx *sqlx.Tx, payload any) error {
 	const op = "OutboxRepositoryImpl.CreateOutbox"
 
 	query := `INSERT INTO outbox_event (event_id, payload) VALUES ($1, $2)`
@@ -52,19 +60,17 @@ func (r *OutboxRepositoryImpl) CreateOutbox(ctx context.Context, payload any, tx
 	return nil
 }
 
-func (r *OutboxRepositoryImpl) GetPendingOutboxes(ctx context.Context, limitEvents int) ([]*model.OutboxEvent, error) {
-	const op = "OutboxRepositoryImpl.GetOutbox"
+func (r *OutboxRepositoryImpl) GetProcessingOutboxes(ctx context.Context, tx *sqlx.Tx, limitEvents int) ([]*model.OutboxEvent, error) {
+	const op = "OutboxRepositoryImpl.GetProcessingOutboxes"
 
-	query := `UPDATE outbox_event SET status = $1
-				WHERE id IN (
-					SELECT id FROM outbox_event WHERE status = $2 AND next_retry_at <= NOW()
-					ORDER BY created_at ASC
-					LIMIT $3
-					FOR UPDATE SKIP LOCKED
-				)
-				RETURNING id, event_id, payload, status, created_at, next_retry_at, attempts;`
+	query := `SELECT id, event_id, payload, status, created_at, next_retry_at, attempts 
+			  FROM outbox_event 
+			  WHERE status = $1 AND next_retry_at <= NOW() 
+			  ORDER BY created_at ASC 
+			  LIMIT $2
+			  FOR UPDATE SKIP LOCKED`
 
-	rows, err := r.db.QueryRows(ctx, query, ProcessingStatus, PendingStatus, limitEvents)
+	rows, err := tx.QueryContext(ctx, query, ProcessingStatus, limitEvents)
 	if err != nil {
 		return nil, appers.ErrSqlExecutions.Builder().Msg(err.Error()).Op(op).Build()
 	}
@@ -87,7 +93,7 @@ func (r *OutboxRepositoryImpl) GetPendingOutboxes(ctx context.Context, limitEven
 	return events, nil
 }
 
-func (r *OutboxRepositoryImpl) UpdateOutboxes(ctx context.Context, events []*model.OutboxEvent) error {
+func (r *OutboxRepositoryImpl) UpdateOutboxes(ctx context.Context, tx *sqlx.Tx, events []*model.OutboxEvent) error {
 	const op = "OutboxRepositoryImpl.UpdateOutboxes"
 
 	valueStrings := make([]string, len(events))
@@ -95,7 +101,7 @@ func (r *OutboxRepositoryImpl) UpdateOutboxes(ctx context.Context, events []*mod
 	counter := 1
 
 	for i, event := range events {
-		valueStrings[i] = fmt.Sprintf("($%d::int, $%d::text, $%d::timestamp, $%d::int)", counter, counter+1, counter+2, counter+3)
+		valueStrings[i] = fmt.Sprintf("($%d::bigint, $%d::text, $%d::timestamp, $%d::int)", counter, counter+1, counter+2, counter+3)
 		args = append(args,
 			event.ID,
 			event.Status,
@@ -117,7 +123,7 @@ func (r *OutboxRepositoryImpl) UpdateOutboxes(ctx context.Context, events []*mod
 		WHERE outbox_event.id = updates.id
 		`, strings.Join(valueStrings, ","))
 
-	_, err := r.db.ExecContext(ctx, query, args...)
+	_, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return appers.ErrSqlExecutions.Builder().Msg(err.Error()).Op(op).Build()
 	}

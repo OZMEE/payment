@@ -8,6 +8,7 @@ import (
 	"payment/internal/appers"
 	"payment/internal/repository"
 	"payment/pkg/config"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -38,9 +39,11 @@ func NewWorkerPoolImpl(cfg config.WorkerConfig, paymentProducer PaymentProducer,
 	}
 }
 
-func (p *WorkerPoolImpl) Start(ctx context.Context) {
+func (p *WorkerPoolImpl) Start(ctx context.Context, wg *sync.WaitGroup) {
 	for workerId := 0; workerId < p.workersCount; workerId++ {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			err := p.worker(ctx, workerId)
 			if err != nil {
 				p.log.Error("Worker fall", zap.Int("workerId", workerId), zap.Error(err))
@@ -49,14 +52,48 @@ func (p *WorkerPoolImpl) Start(ctx context.Context) {
 	}
 }
 
-func (p *WorkerPoolImpl) worker(ctx context.Context, workerId int) error {
+func (p *WorkerPoolImpl) worker(ctx context.Context, workerId int) (errResponse error) {
 	ticker := time.NewTicker(time.Duration(p.timeoutSec) * time.Second)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			outboxEvents, err := p.outboxRepository.GetPendingOutboxes(ctx, p.limitEvents)
+			tx, err := p.outboxRepository.BeginTransaction()
+			if err != nil {
+				p.logError(err, workerId)
+				return err
+			}
+			defer func() {
+				if r := recover(); r != nil {
+					if err := tx.Rollback(); err != nil {
+						p.log.Error("Failed to rollback transaction after panic",
+							zap.Any("recovered", r),
+							zap.Error(err))
+					} else {
+						p.log.Error("Transaction rolled back after panic",
+							zap.Any("recovered", r))
+					}
+					panic(r)
+				}
+
+				if errResponse != nil {
+					if err := tx.Rollback(); err != nil {
+						p.log.Error("Failed to rollback transaction", zap.Error(err))
+						return
+					}
+					p.log.Error("Rollback transaction", zap.Error(errResponse))
+				} else {
+					if errResponse = tx.Commit(); err != nil {
+						p.log.Error("Failed to commit transaction", zap.Error(errResponse))
+						return
+					}
+					p.log.Info("Successfully commit transaction")
+				}
+			}()
+
+			outboxEvents, err := p.outboxRepository.GetProcessingOutboxes(ctx, tx, p.limitEvents)
 			if err != nil {
 				p.logError(err, workerId)
 				return err
@@ -69,10 +106,9 @@ func (p *WorkerPoolImpl) worker(ctx context.Context, workerId int) error {
 
 			for _, event := range outboxEvents {
 				if err := p.paymentProducer.SendPaymentEvent(ctx, event); err != nil {
+					event.Attempts++
 					if event.Attempts < p.maxAttempts {
-						event.Attempts++
 						event.NextRetryAt = calculateNextRetry(event.Attempts)
-						event.Status = repository.PendingStatus
 					} else {
 						event.Status = repository.FailedStatus
 					}
@@ -81,7 +117,7 @@ func (p *WorkerPoolImpl) worker(ctx context.Context, workerId int) error {
 				}
 			}
 
-			err = p.outboxRepository.UpdateOutboxes(ctx, outboxEvents)
+			err = p.outboxRepository.UpdateOutboxes(ctx, tx, outboxEvents)
 			if err != nil {
 				p.logError(err, workerId)
 				return err

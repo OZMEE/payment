@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS outbox_event
     id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_id      uuid      NOT NULL,
     payload       TEXT      NOT NULL,
-    status        TEXT      NOT NULL DEFAULT 'PENDING' CHECK (status in ('PENDING', 'PROCESSING', 'FAILED', 'SUCCESS')),
+    status        TEXT      NOT NULL DEFAULT 'PROCESSING' CHECK (status in ('PROCESSING', 'FAILED', 'SUCCESS')),
     created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
     next_retry_at TIMESTAMP NOT NULL DEFAULT NOW(),
     attempts      INTEGER            DEFAULT 0 CHECK (attempts >= 0)

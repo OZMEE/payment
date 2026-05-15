@@ -17,7 +17,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # 3. Копируем исходники
 COPY . .
 
-RUN go mod tidy
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod tidy -e && go mod verify
 
 # 4. Собираем статический бинарник. Монтируем кэш компиляции для ускорения
 RUN --mount=type=cache,target=/go/pkg/mod \

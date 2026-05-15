@@ -9,6 +9,7 @@ import (
 	"payment/pkg/db"
 	"payment/pkg/kafka"
 	"payment/pkg/logger"
+	"sync"
 
 	"go.uber.org/zap"
 )
@@ -52,7 +53,14 @@ func main() {
 	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, log)
 	paymentRouter := handler.NewPaymentRouterImpl(paymentHandler)
 
-	workerPool.Start(context.Background())
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	workerPool.Start(ctx, &wg)
 
 	paymentRouter.Route(cfg.Server)
 }
