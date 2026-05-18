@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
@@ -18,24 +19,28 @@ type WorkerPool interface {
 }
 
 type WorkerPoolImpl struct {
-	paymentProducer  PaymentProducer
-	outboxRepository repository.OutboxRepository
-	workersCount     int
-	maxAttempts      int
-	timeoutSec       int
-	limitEvents      int
-	log              *zap.Logger
+	paymentProducer         PaymentProducer
+	outboxRepository        repository.OutboxRepository
+	transactionalRepository repository.TransactionalRepository
+	workersCount            int
+	maxAttempts             int
+	timeoutSec              int
+	limitEvents             int
+	log                     *zap.Logger
 }
 
-func NewWorkerPoolImpl(cfg config.WorkerConfig, paymentProducer PaymentProducer, outboxRepository repository.OutboxRepository, log *zap.Logger) *WorkerPoolImpl {
+func NewWorkerPoolImpl(cfg config.WorkerConfig, paymentProducer PaymentProducer,
+	outboxRepository repository.OutboxRepository, transactionalRepository repository.TransactionalRepository,
+	log *zap.Logger) *WorkerPoolImpl {
 	return &WorkerPoolImpl{
-		paymentProducer:  paymentProducer,
-		outboxRepository: outboxRepository,
-		workersCount:     cfg.Count,
-		maxAttempts:      cfg.MaxAttempts,
-		timeoutSec:       cfg.TimeoutSec,
-		limitEvents:      cfg.LimitEvents,
-		log:              log,
+		paymentProducer:         paymentProducer,
+		outboxRepository:        outboxRepository,
+		transactionalRepository: transactionalRepository,
+		workersCount:            cfg.Count,
+		maxAttempts:             cfg.MaxAttempts,
+		timeoutSec:              cfg.TimeoutSec,
+		limitEvents:             cfg.LimitEvents,
+		log:                     log,
 	}
 }
 
@@ -60,66 +65,40 @@ func (p *WorkerPoolImpl) worker(ctx context.Context, workerId int) (errResponse 
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			tx, err := p.outboxRepository.BeginTransaction()
-			if err != nil {
-				p.logError(err, workerId)
-				return err
-			}
-			defer func() {
-				if r := recover(); r != nil {
-					if err := tx.Rollback(); err != nil {
-						p.log.Error("Failed to rollback transaction after panic",
-							zap.Any("recovered", r),
-							zap.Error(err))
+
+			_, err := p.transactionalRepository.RunInTx(func(tx *sqlx.Tx) (any, error) {
+				outboxEvents, err := p.outboxRepository.GetProcessingOutboxes(ctx, tx, p.limitEvents)
+				if err != nil {
+					p.logError(err, workerId)
+					return nil, err
+				}
+				if len(outboxEvents) == 0 {
+					p.log.Info("Not found events", zap.Int("worker_id", workerId))
+					return nil, nil
+				}
+				p.log.Info("Found events", zap.Any("events", outboxEvents), zap.Int("id worker", workerId))
+
+				for _, event := range outboxEvents {
+					if err := p.paymentProducer.SendPaymentEvent(ctx, event); err != nil {
+						event.Attempts++
+						if event.Attempts < p.maxAttempts {
+							event.NextRetryAt = calculateNextRetry(event.Attempts)
+						} else {
+							event.Status = repository.FailedStatus
+						}
 					} else {
-						p.log.Error("Transaction rolled back after panic",
-							zap.Any("recovered", r))
+						event.Status = repository.SuccessStatus
 					}
-					panic(r)
 				}
 
-				if errResponse != nil {
-					if err := tx.Rollback(); err != nil {
-						p.log.Error("Failed to rollback transaction", zap.Error(err))
-						return
-					}
-					p.log.Error("Rollback transaction", zap.Error(errResponse))
-				} else {
-					if errResponse = tx.Commit(); err != nil {
-						p.log.Error("Failed to commit transaction", zap.Error(errResponse))
-						return
-					}
-					p.log.Info("Successfully commit transaction")
+				err = p.outboxRepository.UpdateOutboxes(ctx, tx, outboxEvents)
+				if err != nil {
+					p.logError(err, workerId)
+					return nil, err
 				}
-			}()
-
-			outboxEvents, err := p.outboxRepository.GetProcessingOutboxes(ctx, tx, p.limitEvents)
+				return outboxEvents, nil
+			})
 			if err != nil {
-				p.logError(err, workerId)
-				return err
-			}
-			if len(outboxEvents) == 0 {
-				p.log.Info("Not found events", zap.Int("worker_id", workerId))
-				continue
-			}
-			p.log.Info("Found events", zap.Any("events", outboxEvents), zap.Int("id worker", workerId))
-
-			for _, event := range outboxEvents {
-				if err := p.paymentProducer.SendPaymentEvent(ctx, event); err != nil {
-					event.Attempts++
-					if event.Attempts < p.maxAttempts {
-						event.NextRetryAt = calculateNextRetry(event.Attempts)
-					} else {
-						event.Status = repository.FailedStatus
-					}
-				} else {
-					event.Status = repository.SuccessStatus
-				}
-			}
-
-			err = p.outboxRepository.UpdateOutboxes(ctx, tx, outboxEvents)
-			if err != nil {
-				p.logError(err, workerId)
 				return err
 			}
 		}

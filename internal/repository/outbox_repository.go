@@ -23,7 +23,6 @@ type OutboxRepository interface {
 	GetProcessingOutboxes(ctx context.Context, tx *sqlx.Tx, limitEvents int) ([]*model.OutboxEvent, error)
 	CreateOutbox(ctx context.Context, tx *sqlx.Tx, payload any) error
 	UpdateOutboxes(ctx context.Context, tx *sqlx.Tx, events []*model.OutboxEvent) error
-	BeginTransaction() (*sqlx.Tx, error)
 }
 
 type OutboxRepositoryImpl struct {
@@ -32,14 +31,6 @@ type OutboxRepositoryImpl struct {
 
 func NewOutboxRepositoryImpl(db *db.Database) *OutboxRepositoryImpl {
 	return &OutboxRepositoryImpl{db: db}
-}
-
-func (r *OutboxRepositoryImpl) BeginTransaction() (*sqlx.Tx, error) {
-	tx, err := r.db.BeginTransaction()
-	if err != nil {
-		return nil, err
-	}
-	return tx, nil
 }
 
 func (r *OutboxRepositoryImpl) CreateOutbox(ctx context.Context, tx *sqlx.Tx, payload any) error {

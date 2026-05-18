@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"payment/internal/appers"
 	"payment/internal/model"
 	"payment/internal/repository"
 
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 )
 
@@ -17,13 +19,19 @@ type PaymentService interface {
 }
 
 type PaymentServiceImpl struct {
-	paymentRepository repository.PaymentRepository
-	outboxRepository  repository.OutboxRepository
-	log               *zap.Logger
+	paymentRepository       repository.PaymentRepository
+	outboxRepository        repository.OutboxRepository
+	transactionalRepository repository.TransactionalRepository
+	log                     *zap.Logger
 }
 
-func NewPaymentServiceImpl(repository repository.PaymentRepository, outboxRepository repository.OutboxRepository, log *zap.Logger) *PaymentServiceImpl {
-	return &PaymentServiceImpl{paymentRepository: repository, outboxRepository: outboxRepository, log: log}
+func NewPaymentServiceImpl(repository repository.PaymentRepository, outboxRepository repository.OutboxRepository,
+	transactionalRepository repository.TransactionalRepository, log *zap.Logger) *PaymentServiceImpl {
+	return &PaymentServiceImpl{
+		paymentRepository:       repository,
+		outboxRepository:        outboxRepository,
+		transactionalRepository: transactionalRepository,
+		log:                     log}
 }
 
 func (s PaymentServiceImpl) GetAllPayments(ctx context.Context) ([]*model.Payment, error) {
@@ -43,49 +51,28 @@ func (s PaymentServiceImpl) GetPaymentById(ctx context.Context, id int64) (*mode
 }
 
 func (s PaymentServiceImpl) PostPayment(ctx context.Context, dto *model.PaymentDto) (response *model.Payment, errResponse error) {
-	tx, err := s.paymentRepository.BeginTransaction()
+	const op = "PaymentServiceImpl.PostPayment"
+	entity, err := s.transactionalRepository.RunInTx(func(tx *sqlx.Tx) (any, error) {
+
+		payment, err := s.paymentRepository.PostPayment(ctx, tx, dtoToPayment(dto))
+		if err != nil {
+			return nil, err
+		}
+
+		if err = s.outboxRepository.CreateOutbox(ctx, tx, payment); err != nil {
+			return nil, err
+		}
+
+		return payment, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			if err := tx.Rollback(); err != nil {
-				s.log.Error("Failed to rollback transaction after panic",
-					zap.Any("recovered", r),
-					zap.Error(err))
-			} else {
-				s.log.Error("Transaction rolled back after panic",
-					zap.Any("recovered", r))
-			}
-			panic(r)
-		}
-
-		if errResponse != nil {
-			if err := tx.Rollback(); err != nil {
-				s.log.Error("Failed to rollback transaction", zap.Error(err))
-				return
-			}
-			s.log.Error("Rollback transaction", zap.Error(errResponse))
-		} else {
-			if errResponse = tx.Commit(); err != nil {
-				s.log.Error("Failed to commit transaction", zap.Any("payment", response), zap.Error(errResponse))
-				return
-			}
-			s.log.Info("Successfully commit transaction", zap.Any("payment", response))
-		}
-	}()
-
-	payment, err := s.paymentRepository.PostPayment(ctx, tx, dtoToPayment(dto))
-	if err != nil {
-		return nil, err
+	if payment, ok := entity.(*model.Payment); !ok {
+		return nil, appers.ErrTypeAssertion.Builder().Op(op).Build()
+	} else {
+		return payment, nil
 	}
-
-	if err = s.outboxRepository.CreateOutbox(ctx, tx, payment); err != nil {
-		return nil, err
-	}
-
-	return payment, nil
 }
 
 func (s PaymentServiceImpl) PutPayment(ctx context.Context, dto *model.PaymentDto, id int64) error {

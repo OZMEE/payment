@@ -84,4 +84,8 @@ var (
 		Code:   http.StatusBadRequest,
 		Status: "Validation error",
 	}
+	ErrTypeAssertion = &ErrorResp{
+		Code:   http.StatusInternalServerError,
+		Status: "Type assertion error",
+	}
 )

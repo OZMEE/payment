@@ -14,20 +14,20 @@ import (
 	_ "github.com/lib/pq"
 )
 
+type PaymentRepository interface {
+	GetAllPayments(ctx context.Context) ([]*model.Payment, error)
+	GetPaymentById(ctx context.Context, id int64) (*model.Payment, error)
+	PostPayment(ctx context.Context, tx *sqlx.Tx, dto *model.Payment) (*model.Payment, error)
+	PutPayment(ctx context.Context, payment *model.Payment, id int64) (*model.Payment, error)
+	DeletePayment(ctx context.Context, id int64) (*model.Payment, error)
+}
+
 type PaymentRepositoryImpl struct {
 	db *db.Database
 }
 
 func NewPaymentRepositoryImpl(db *db.Database) *PaymentRepositoryImpl {
 	return &PaymentRepositoryImpl{db: db}
-}
-
-func (r *PaymentRepositoryImpl) BeginTransaction() (*sqlx.Tx, error) {
-	tx, err := r.db.BeginTransaction()
-	if err != nil {
-		return nil, err
-	}
-	return tx, nil
 }
 
 func (r *PaymentRepositoryImpl) GetAllPayments(ctx context.Context) ([]*model.Payment, error) {

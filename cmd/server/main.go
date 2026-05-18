@@ -48,8 +48,9 @@ func main() {
 	paymentProducerService := service.NewPaymentProducerImpl(cfg.Kafka, producer, log)
 	paymentRepo := repository.NewPaymentRepositoryImpl(database)
 	outboxRepo := repository.NewOutboxRepositoryImpl(database)
-	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, outboxRepo, log)
-	workerPool := service.NewWorkerPoolImpl(cfg.Worker, paymentProducerService, outboxRepo, log)
+	transactionRepo := repository.NewTransactionalRepositoryImpl(database, log)
+	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, outboxRepo, transactionRepo, log)
+	workerPool := service.NewWorkerPoolImpl(cfg.Worker, paymentProducerService, outboxRepo, transactionRepo, log)
 	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, log)
 	paymentRouter := handler.NewPaymentRouterImpl(paymentHandler)
 
