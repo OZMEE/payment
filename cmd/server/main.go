@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"payment/internal/handler"
-	"payment/internal/repository"
+	"payment/internal/repository/postgres"
+	"payment/internal/repository/redis"
 	"payment/internal/service"
+	"payment/pkg/cache"
 	"payment/pkg/config"
 	"payment/pkg/db"
 	"payment/pkg/kafka"
@@ -40,16 +42,29 @@ func main() {
 	}(database)
 	log.Info("Successfully connected to db")
 
+	cacheDB, err := cache.New(cfg.Cache, log)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		err := cacheDB.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	log.Info("Successfully connected to cache")
+
 	producer, err := kafka.NewProducer(cfg.Kafka)
 	if err != nil {
 		panic(err)
 	}
 	log.Info("Successfully connected to kafka")
 	paymentProducerService := service.NewPaymentProducerImpl(cfg.Kafka, producer, log)
-	paymentRepo := repository.NewPaymentRepositoryImpl(database)
-	outboxRepo := repository.NewOutboxRepositoryImpl(database)
-	transactionRepo := repository.NewTransactionalRepositoryImpl(database, log)
-	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, outboxRepo, transactionRepo, log)
+	paymentRepo := postgres.NewPaymentRepositoryImpl(database)
+	outboxRepo := postgres.NewOutboxRepositoryImpl(database)
+	transactionRepo := postgres.NewTransactionalRepositoryImpl(database, log)
+	cacheRepository := redis.NewCacheRepository(cacheDB)
+	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, outboxRepo, cacheRepository, transactionRepo, log)
 	workerPool := service.NewWorkerPoolImpl(cfg.Worker, paymentProducerService, outboxRepo, transactionRepo, log)
 	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, log)
 	paymentRouter := handler.NewPaymentRouterImpl(paymentHandler)

@@ -6,9 +6,15 @@ database:
   host: db
   port: 5432
   user : postgres
-  #password: supersecret
+  #password: в .env
   name: myapp_db
   migrations_path: /app/deploy
+cache:
+  host: redis
+  port: 6379
+  #password: в .env
+  db: 0
+  expiration_minutes: 10
 kafka:
   brokers:
    - "kafka:9093"
@@ -24,7 +30,7 @@ kafka:
   dial_timeout: 5
   context_timeout: 5
 worker:
-  count: 2
+  count: 5
   max_attempts: 3
   timeout_sec: 5
   limit_events: 3

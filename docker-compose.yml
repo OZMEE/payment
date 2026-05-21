@@ -10,9 +10,11 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
-      - kafka-network
+      - app-network
 
   db:
     image: postgres:16-alpine
@@ -30,7 +32,42 @@ services:
       retries: 5
       start_period: 10s
     networks:
-      - kafka-network
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-server
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass StrongRedisPassword123! --appendonly yes
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Для управления Redis через веб-интерфейс
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    platform: linux/amd64
+    container_name: redis-commander
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=StrongRedisPassword123!
+      - REDIS_DB=0
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
 
   zookeeper:
     image: 'confluentinc/cp-zookeeper:7.5.0'
@@ -41,7 +78,7 @@ services:
     ports:
       - '2181:2181'
     networks:
-      - kafka-network
+      - app-network
 
   kafka:
     image: 'confluentinc/cp-kafka:7.5.0'
@@ -58,11 +95,10 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
     depends_on:
       - zookeeper
     networks:
-      - kafka-network
+      - app-network
     healthcheck:
       test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9093", "--list"]
       interval: 10s
@@ -81,10 +117,32 @@ services:
       kafka:
         condition: service_healthy
     networks:
-      - kafka-network
+      - app-network
+
+  kafka-setup:
+    image: 'confluentinc/cp-kafka:7.5.0'
+    container_name: kafka-setup
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - app-network
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      echo 'Waiting for Kafka to be ready...'
+      sleep 10
+
+      kafka-topics --bootstrap-server kafka:9093 --create --if-not-exists --topic payment-events --partitions 3 --replication-factor 1
+
+      kafka-topics --bootstrap-server kafka:9093 --list
+
+      echo 'Topics created successfully'
+      sleep infinity
+      "
 
 networks:
-  kafka-network:
+  app-network:
     driver: bridge
 
 volumes:

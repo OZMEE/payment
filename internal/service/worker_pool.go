@@ -6,7 +6,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"payment/internal/appers"
-	"payment/internal/repository"
+	"payment/internal/repository/postgres"
 	"payment/pkg/config"
 	"sync"
 	"time"
@@ -20,8 +20,8 @@ type WorkerPool interface {
 
 type WorkerPoolImpl struct {
 	paymentProducer         PaymentProducer
-	outboxRepository        repository.OutboxRepository
-	transactionalRepository repository.TransactionalRepository
+	outboxRepository        postgres.OutboxRepository
+	transactionalRepository postgres.TransactionalRepository
 	workersCount            int
 	maxAttempts             int
 	timeoutSec              int
@@ -30,7 +30,7 @@ type WorkerPoolImpl struct {
 }
 
 func NewWorkerPoolImpl(cfg config.WorkerConfig, paymentProducer PaymentProducer,
-	outboxRepository repository.OutboxRepository, transactionalRepository repository.TransactionalRepository,
+	outboxRepository postgres.OutboxRepository, transactionalRepository postgres.TransactionalRepository,
 	log *zap.Logger) *WorkerPoolImpl {
 	return &WorkerPoolImpl{
 		paymentProducer:         paymentProducer,
@@ -54,6 +54,8 @@ func (p *WorkerPoolImpl) Start(ctx context.Context, wg *sync.WaitGroup) {
 				p.log.Error("Worker fall", zap.Int("workerId", workerId), zap.Error(err))
 			}
 		}()
+		//Задержка перед запуском каждого воркера
+		time.Sleep(time.Duration(p.timeoutSec/p.workersCount) * time.Second)
 	}
 }
 
@@ -84,10 +86,10 @@ func (p *WorkerPoolImpl) worker(ctx context.Context, workerId int) (errResponse 
 						if event.Attempts < p.maxAttempts {
 							event.NextRetryAt = calculateNextRetry(event.Attempts)
 						} else {
-							event.Status = repository.FailedStatus
+							event.Status = postgres.FailedStatus
 						}
 					} else {
-						event.Status = repository.SuccessStatus
+						event.Status = postgres.SuccessStatus
 					}
 				}
 
