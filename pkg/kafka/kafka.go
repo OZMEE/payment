@@ -28,8 +28,8 @@ func NewProducer(cfg config.KafkaConfig) (*kgo.Client, error) {
 
 		kgo.RecordRetries(int(cfg.RecordRetries)),
 		kgo.RecordDeliveryTimeout(time.Duration(cfg.RecordDeliveryTimeout) * time.Second),
-		kgo.MaxBufferedRecords(int(cfg.MaxBufferedBytes)),
-		kgo.MaxBufferedBytes(int(cfg.MaxBufferedRecords)),
+		kgo.MaxBufferedRecords(int(cfg.MaxBufferedRecords)),
+		kgo.MaxBufferedBytes(int(cfg.MaxBufferedBytes)),
 		kgo.DialTimeout(time.Duration(cfg.DialTimeout) * time.Second), // Таймаут на установление соединения
 	}
 

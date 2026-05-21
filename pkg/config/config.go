@@ -12,6 +12,7 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	Server   ServerConfig   `mapstructure:"server"`
 	Kafka    KafkaConfig    `mapstructure:"kafka"`
+	Worker   WorkerConfig   `mapstructure:"worker"`
 }
 
 type DatabaseConfig struct {
@@ -42,6 +43,13 @@ type KafkaConfig struct {
 	MaxBufferedBytes      int32    `mapstructure:"max_buffered_bytes"`
 	DialTimeout           int32    `mapstructure:"dial_timeout"`
 	ContextTimeout        int32    `mapstructure:"context_timeout"`
+}
+
+type WorkerConfig struct {
+	Count       int `mapstructure:"count"`
+	MaxAttempts int `mapstructure:"max_attempts"`
+	TimeoutSec  int `mapstructure:"timeout_sec"`
+	LimitEvents int `mapstructure:"limit_events"`
 }
 
 func Load() (*Config, error) {

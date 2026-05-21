@@ -2,8 +2,12 @@ package service
 
 import (
 	"context"
+	"payment/internal/appers"
 	"payment/internal/model"
 	"payment/internal/repository"
+
+	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
 )
 
 type PaymentService interface {
@@ -15,16 +19,23 @@ type PaymentService interface {
 }
 
 type PaymentServiceImpl struct {
-	repository      repository.PaymentRepository
-	paymentProducer PaymentProducer
+	paymentRepository       repository.PaymentRepository
+	outboxRepository        repository.OutboxRepository
+	transactionalRepository repository.TransactionalRepository
+	log                     *zap.Logger
 }
 
-func NewPaymentServiceImpl(repository repository.PaymentRepository, paymentProducer PaymentProducer) *PaymentServiceImpl {
-	return &PaymentServiceImpl{repository: repository, paymentProducer: paymentProducer}
+func NewPaymentServiceImpl(repository repository.PaymentRepository, outboxRepository repository.OutboxRepository,
+	transactionalRepository repository.TransactionalRepository, log *zap.Logger) *PaymentServiceImpl {
+	return &PaymentServiceImpl{
+		paymentRepository:       repository,
+		outboxRepository:        outboxRepository,
+		transactionalRepository: transactionalRepository,
+		log:                     log}
 }
 
 func (s PaymentServiceImpl) GetAllPayments(ctx context.Context) ([]*model.Payment, error) {
-	payments, err := s.repository.GetAllPayments(ctx)
+	payments, err := s.paymentRepository.GetAllPayments(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -32,28 +43,40 @@ func (s PaymentServiceImpl) GetAllPayments(ctx context.Context) ([]*model.Paymen
 }
 
 func (s PaymentServiceImpl) GetPaymentById(ctx context.Context, id int64) (*model.Payment, error) {
-	db, err := s.repository.GetPaymentById(ctx, id)
+	payment, err := s.paymentRepository.GetPaymentById(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return db, nil
+	return payment, nil
 }
 
-func (s PaymentServiceImpl) PostPayment(ctx context.Context, dto *model.PaymentDto) (*model.Payment, error) {
-	db, err := s.repository.PostPayment(ctx, dtoToPayment(dto))
+func (s PaymentServiceImpl) PostPayment(ctx context.Context, dto *model.PaymentDto) (response *model.Payment, errResponse error) {
+	const op = "PaymentServiceImpl.PostPayment"
+	entity, err := s.transactionalRepository.RunInTx(func(tx *sqlx.Tx) (any, error) {
+
+		payment, err := s.paymentRepository.PostPayment(ctx, tx, dtoToPayment(dto))
+		if err != nil {
+			return nil, err
+		}
+
+		if err = s.outboxRepository.CreateOutbox(ctx, tx, payment); err != nil {
+			return nil, err
+		}
+
+		return payment, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if err := s.paymentProducer.SendPaymentEvent(ctx, db, "user-id"); err != nil {
-		return nil, err
+	if payment, ok := entity.(*model.Payment); !ok {
+		return nil, appers.ErrTypeAssertion.Builder().Op(op).Build()
+	} else {
+		return payment, nil
 	}
-
-	return db, nil
 }
 
 func (s PaymentServiceImpl) PutPayment(ctx context.Context, dto *model.PaymentDto, id int64) error {
-	_, err := s.repository.PutPayment(ctx, dtoToPayment(dto), id)
+	_, err := s.paymentRepository.PutPayment(ctx, dtoToPayment(dto), id)
 	if err != nil {
 		return err
 	}
@@ -61,7 +84,7 @@ func (s PaymentServiceImpl) PutPayment(ctx context.Context, dto *model.PaymentDt
 }
 
 func (s PaymentServiceImpl) DeletePayment(ctx context.Context, id int64) error {
-	_, err := s.repository.DeletePayment(ctx, id)
+	_, err := s.paymentRepository.DeletePayment(ctx, id)
 	if err != nil {
 		return err
 	}

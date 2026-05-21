@@ -15,6 +15,7 @@ type DB interface {
 	QueryRow(ctx context.Context, query string, args ...any) *sqlx.Row
 	QueryRows(ctx context.Context, query string, args ...any) (*sqlx.Rows, error)
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	BeginTransaction() (*sqlx.Tx, error)
 	Close() error
 }
 
@@ -32,6 +33,10 @@ func (d *Database) QueryRows(ctx context.Context, query string, args ...any) (*s
 
 func (d *Database) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return d.db.ExecContext(ctx, query, args...)
+}
+
+func (d *Database) BeginTransaction() (*sqlx.Tx, error) {
+	return d.db.Beginx()
 }
 
 func (d *Database) Close() error {

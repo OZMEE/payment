@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"payment/internal/handler"
 	"payment/internal/repository"
 	"payment/internal/service"
@@ -8,6 +9,7 @@ import (
 	"payment/pkg/db"
 	"payment/pkg/kafka"
 	"payment/pkg/logger"
+	"sync"
 
 	"go.uber.org/zap"
 )
@@ -45,9 +47,21 @@ func main() {
 	log.Info("Successfully connected to kafka")
 	paymentProducerService := service.NewPaymentProducerImpl(cfg.Kafka, producer, log)
 	paymentRepo := repository.NewPaymentRepositoryImpl(database)
-	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, paymentProducerService)
+	outboxRepo := repository.NewOutboxRepositoryImpl(database)
+	transactionRepo := repository.NewTransactionalRepositoryImpl(database, log)
+	paymentSvc := service.NewPaymentServiceImpl(paymentRepo, outboxRepo, transactionRepo, log)
+	workerPool := service.NewWorkerPoolImpl(cfg.Worker, paymentProducerService, outboxRepo, transactionRepo, log)
 	paymentHandler := handler.NewPaymentHandlerImpl(paymentSvc, log)
 	paymentRouter := handler.NewPaymentRouterImpl(paymentHandler)
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	workerPool.Start(ctx, &wg)
 
 	paymentRouter.Route(cfg.Server)
 }
