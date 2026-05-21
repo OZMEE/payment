@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
+	Cache    CacheConfig    `mapstructure:"cache"`
 	Server   ServerConfig   `mapstructure:"server"`
 	Kafka    KafkaConfig    `mapstructure:"kafka"`
 	Worker   WorkerConfig   `mapstructure:"worker"`
@@ -23,6 +24,14 @@ type DatabaseConfig struct {
 	Password       string `mapstructure:"password"`
 	Name           string `mapstructure:"name"`
 	MigrationsPath string `mapstructure:"migrations_path"`
+}
+
+type CacheConfig struct {
+	Host              string `mapstructure:"host"`
+	Port              int    `mapstructure:"port"`
+	Password          string `mapstructure:"password"`
+	DB                int    `mapstructure:"db"`
+	ExpirationMinutes int    `mapstructure:"expiration_minutes"`
 }
 
 type ServerConfig struct {
@@ -65,7 +74,11 @@ func Load() (*Config, error) {
 	v.SetEnvPrefix("APP")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	//v.AutomaticEnv()
-	err := v.BindEnv("database.password", "APP_DATABASE_PASSWORD")
+	err := v.BindEnv("database.password", "DB_PASSWORD")
+	if err != nil {
+		return nil, err
+	}
+	err = v.BindEnv("cache.password", "CACHE_PASSWORD")
 	if err != nil {
 		return nil, err
 	}

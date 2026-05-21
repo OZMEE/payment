@@ -56,7 +56,7 @@ func (e *ErrorBuilder) Build() *ErrorResp {
 }
 
 var (
-	ErrEventFound = &ErrorResp{
+	ErrPaymentNotFound = &ErrorResp{
 		Code:   http.StatusNotFound,
 		Status: "payment not found",
 	}
@@ -79,6 +79,10 @@ var (
 	ErrSqlExecutions = &ErrorResp{
 		Code:   http.StatusInternalServerError,
 		Status: "Sql execution error",
+	}
+	ErrUpdateCacheData = &ErrorResp{
+		Code:   http.StatusInternalServerError,
+		Status: "Update cache data error",
 	}
 	ErrValidation = &ErrorResp{
 		Code:   http.StatusBadRequest,

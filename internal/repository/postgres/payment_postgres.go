@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -18,8 +18,8 @@ type PaymentRepository interface {
 	GetAllPayments(ctx context.Context) ([]*model.Payment, error)
 	GetPaymentById(ctx context.Context, id int64) (*model.Payment, error)
 	PostPayment(ctx context.Context, tx *sqlx.Tx, dto *model.Payment) (*model.Payment, error)
-	PutPayment(ctx context.Context, payment *model.Payment, id int64) (*model.Payment, error)
-	DeletePayment(ctx context.Context, id int64) (*model.Payment, error)
+	PutPayment(ctx context.Context, tx *sqlx.Tx, payment *model.Payment, id int64) (*model.Payment, error)
+	DeletePayment(ctx context.Context, tx *sqlx.Tx, id int64) (*model.Payment, error)
 }
 
 type PaymentRepositoryImpl struct {
@@ -66,14 +66,14 @@ func (r *PaymentRepositoryImpl) PostPayment(ctx context.Context, tx *sqlx.Tx, dt
 	return scanPaymentRow(row, op)
 }
 
-func (r *PaymentRepositoryImpl) PutPayment(ctx context.Context, dto *model.Payment, id int64) (*model.Payment, error) {
+func (r *PaymentRepositoryImpl) PutPayment(ctx context.Context, tx *sqlx.Tx, dto *model.Payment, id int64) (*model.Payment, error) {
 	const op = "PaymentRepositoryImpl.PutPayment"
 	query := "UPDATE payments SET amount = $1 WHERE id = $2 RETURNING id, payment_id, amount"
-	row := r.db.QueryRow(ctx, query, dto.Amount, id)
+	row := tx.QueryRowxContext(ctx, query, dto.Amount, id)
 	return scanPaymentRow(row, op)
 }
 
-func (r *PaymentRepositoryImpl) DeletePayment(ctx context.Context, id int64) (*model.Payment, error) {
+func (r *PaymentRepositoryImpl) DeletePayment(ctx context.Context, tx *sqlx.Tx, id int64) (*model.Payment, error) {
 	const op = "PaymentRepositoryImpl.DeletePayment"
 	query := "DELETE FROM payments WHERE id = $1 RETURNING id, payment_id, amount"
 	row := r.db.QueryRow(ctx, query, id)
@@ -84,7 +84,7 @@ func scanPaymentRow(rows *sqlx.Row, op string) (*model.Payment, error) {
 	var payment model.Payment
 	if err := rows.Scan(&payment.ID, &payment.PaymentId, &payment.Amount); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, appers.ErrEventFound.Builder().Msg(err.Error()).Build()
+			return nil, appers.ErrPaymentNotFound.Builder().Msg(err.Error()).Build()
 		}
 		if pgErr, ok := errors.AsType[*pq.Error](err); ok {
 			switch pgErr.Code {
